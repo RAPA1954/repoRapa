@@ -1,0 +1,34 @@
+// Definición del punto de la estación Aero Neuquén
+var punto_estacion = ee.Geometry.Point([-68.136677, -38.952087]);
+
+Map.centerObject(punto_estacion);
+Map.addLayer(ee.FeatureCollection(punto_estacion).style({color:'red', pointSize:5}));
+
+// Carga del dataset CHIRPS diario
+var chirps = ee.ImageCollection('UCSB-CHG/CHIRPS/DAILY')
+  .filterDate('1981-01-01', '2024-12-31')
+  .select('precipitation');
+
+// Función para extraer valor puntual en cada imagen
+var extractValues = function(image) {
+  var value = image.reduceRegion({
+    reducer: ee.Reducer.first(),
+    geometry: punto_estacion,
+    scale: image.projection().nominalScale() // en reemplazo de 5566, es más robusto
+  });
+  return ee.Feature(null, {
+    'fecha': image.date().format('YYYY-MM-dd'),
+    'pd': value.get('precipitation')
+  });
+};
+
+// Convertir a FeatureCollection
+var chirps_fc = ee.FeatureCollection(chirps.map(extractValues));
+
+// Exportar a Google Drive como CSV
+Export.table.toDrive({
+  collection: chirps_fc,
+  description: 'CHIRPS_AeroNqn',
+  fileFormat: 'CSV',
+  selectors: ['fecha', 'pd']
+});

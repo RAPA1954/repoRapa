@@ -1,0 +1,36 @@
+// Definición del punto de la estación Aero Neuquén
+ var punto_estacion = ee.Geometry.Point([-68.136677, -38.952087]); 
+
+Map.centerObject(punto_estacion);
+Map.addLayer(ee.FeatureCollection(punto_estacion).style({color:'red', pointSize:5}));
+
+// Modelo: MPI-ESM1-2-HR | Escenario: SSP2-4.5
+var gcm = ee.ImageCollection('NASA/GDDP-CMIP6')
+  .filter(ee.Filter.eq('model', 'MPI-ESM1-2-HR'))
+  .filter(ee.Filter.eq('scenario', 'ssp245'))
+  .filterDate('2015-01-01', '2100-12-31')
+  .select(['pr', 'tasmax', 'tasmin']);
+ 
+var extractGCM = function(image) {
+  var vals = image.reduceRegion({
+    reducer: ee.Reducer.first(),
+    geometry: punto_estacion,
+    scale: image.projection().nominalScale() // en reemplazo de 25000, es más robusto
+  });
+  return ee.Feature(null, {
+    'date':   image.date().format('YYYY-MM-dd'),
+    'pr_mm':  ee.Number(vals.get('pr')).multiply(86400),   // kg/m²/s → mm/día
+    'tmax_c': ee.Number(vals.get('tasmax')).subtract(273.15), // K → °C
+    'tmin_c': ee.Number(vals.get('tasmin')).subtract(273.15)  // K → °C
+  });
+}; 
+
+
+var gcm_fc = ee.FeatureCollection(gcm.map(extractGCM));
+
+Export.table.toDrive({
+  collection: gcm_fc,
+  description: 'MPI_ESM1_2HR_ssp245_AeroNqn',
+  fileFormat: 'CSV',
+  selectors: ['date', 'pr_mm', 'tmax_c', 'tmin_c']
+}); 

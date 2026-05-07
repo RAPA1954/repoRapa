@@ -1,0 +1,36 @@
+// Definición del punto de la estación Aero Neuquén
+var punto_estacion = ee.Geometry.Point([-68.136677, -38.952087]);
+
+Map.centerObject(punto_estacion);
+Map.addLayer(ee.FeatureCollection(punto_estacion).style({color:'red', pointSize:5}));
+
+// Carga del dataset ERA5 diario
+var era5 = ee.ImageCollection('ECMWF/ERA5_LAND/DAILY_AGGR')
+  .filterDate('1981-01-01', '2024-12-31')
+  .select('total_precipitation_sum');
+
+// Función de extracción con conversión m → mm
+var extractERA5 = function(image) {
+  var value = image.multiply(1000)  // Conversión m/día → mm/día
+    .reduceRegion({
+      reducer: ee.Reducer.first(),
+      geometry: punto_estacion,
+      scale: image.projection().nominalScale() // en reemplazo de 11132, es más robusto
+    });
+  return ee.Feature(null, {
+    'fecha': image.date().format('YYYY-MM-dd'),
+    'pd': value.get('total_precipitation_sum')
+  });
+};
+
+
+// Convertir a FeatureCollection
+var era5_fc = ee.FeatureCollection(era5.map(extractERA5));
+
+// Exportar a Google Drive como CSV
+Export.table.toDrive({
+  collection: era5_fc,
+  description: 'ERA5_AeroNqn',
+  fileFormat: 'CSV',
+  selectors: ['fecha', 'pd']
+});
